@@ -1057,25 +1057,24 @@ async function exportSessionHtml(sessionFile: string, outputDir: string, piPacka
 
 function createShareLink(htmlPath: string): { shareUrl: string; gistUrl: string } | { error: string } {
 	try {
-		const auth = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
+		const auth = spawnSync("glab", ["auth", "status"], { encoding: "utf-8" });
 		if (auth.status !== 0) {
-			return { error: "GitHub CLI is not logged in. Run 'gh auth login' first." };
+			return { error: "GitLab CLI is not logged in. Run 'glab auth login' first." };
 		}
 	} catch {
-		return { error: "GitHub CLI (gh) is not installed." };
+		return { error: "GitLab CLI (glab) is not installed." };
 	}
 
 	try {
-		const result = spawnSync("gh", ["gist", "create", htmlPath], { encoding: "utf-8" });
+		const result = spawnSync("glab", ["snippet", "create", htmlPath, "--visibility", "private"], { encoding: "utf-8" });
 		if (result.status !== 0) {
-			const err = (result.stderr || "").trim() || "Failed to create gist.";
+			const err = (result.stderr || "").trim() || "Failed to create snippet.";
 			return { error: err };
 		}
-		const gistUrl = (result.stdout || "").trim();
-		const gistId = gistUrl.split("/").pop();
-		if (!gistId) return { error: "Failed to parse gist ID." };
-		const shareUrl = `https://shittycodingagent.ai/session/?${gistId}`;
-		return { shareUrl, gistUrl };
+		const snippetUrl = (result.stdout || "").trim();
+		if (!snippetUrl) return { error: "Failed to parse snippet URL." };
+		// glab outputs the snippet URL directly (e.g., https://gitlab.beetroot.se/.../-/snippets/1)
+		return { shareUrl: snippetUrl, gistUrl: snippetUrl };
 	} catch (err) {
 		return { error: String(err) };
 	}
