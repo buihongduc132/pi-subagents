@@ -44,6 +44,8 @@ describe("B4: steer-on-busy child downgrade", () => {
 			// Start session and agent (sets agentRunning=true)
 			handlers.get("session_start")?.({});
 			handlers.get("agent_start")?.({});
+			// Trigger turn_start to set inTurn=true (mid-turn busy state)
+			handlers.get("turn_start")?.({});
 
 			// Enable throw-on-steer to simulate busy agent
 			throwOnSteer = true;
