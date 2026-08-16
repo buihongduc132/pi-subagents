@@ -509,21 +509,80 @@ function effectiveAgentMatch(matches: AgentConfig[]): { agent?: AgentConfig; err
 	return {};
 }
 
+const CHILD_BUILTIN_TOOLS = new Set([
+	"bash",
+	"edit",
+	"find",
+	"grep",
+	"ls",
+	"read",
+	"write",
+	// runtime-registered child tools (subagent-prompt-runtime.ts)
+	"contact_supervisor",
+	"structured_output",
+	"wait",
+	"subagent",
+	// ambient research extension tools (declared by builtin researcher agent)
+	"web_search",
+	"fetch_content",
+	"get_search_content",
+]);
+
+function validateAgentTools(agent: AgentConfig): string | undefined {
+	if (!agent.tools?.length) return undefined;
+	const invalid = agent.tools.filter((tool) => {
+		// Path-like entries load extension code — assumed valid
+		if (tool.includes("/") || tool.endsWith(".ts") || tool.endsWith(".js")) return false;
+		// MCP-prefixed tools are configured separately
+		if (tool.startsWith("mcp:")) return false;
+		// Builtin tools are always available
+		if (CHILD_BUILTIN_TOOLS.has(tool)) return false;
+		// Bare name not in builtin set — potentially unavailable
+		return true;
+	});
+	if (invalid.length === 0) return undefined;
+	return `Agent '${agent.name}' declares unavailable child tools: ${invalid.join(", ")}. The \`tools\` field is a strict allowlist; bare names must be builtins (${[...CHILD_BUILTIN_TOOLS].join(", ")}) or path-like extension entries.`;
+}
+
 export function resolveAgentName(name: string, agents: AgentConfig[]): { agent?: AgentConfig; error?: string } {
 	const raw = name.trim();
 	const exact = agents.filter((agent) => agent.name === raw || agent.localName === raw);
-	if (exact.length === 1) return exact[0] ? { agent: exact[0] } : {};
+	if (exact.length === 1) {
+		const agent = exact[0];
+		if (!agent) return {};
+		// B5: validate tool allowlist at resolve time to fail fast before spawn
+		const toolError = validateAgentTools(agent);
+		if (toolError) return { error: toolError };
+		return { agent };
+	}
 	if (exact.length > 1) {
 		const effective = effectiveAgentMatch(exact);
-		if (effective.agent) return effective;
+		if (effective.agent) {
+			// B5: validate tool allowlist at resolve time
+			const toolError = validateAgentTools(effective.agent);
+			if (toolError) return { error: toolError };
+			return effective;
+		}
 		return { error: `Ambiguous agent name '${name}': ${exact.map((agent) => agent.name).join(", ")}` };
 	}
 
 	const aliases = agents.filter((agent) => agent.aliases?.includes(raw));
-	if (aliases.length === 1) return aliases[0] ? { agent: aliases[0] } : {};
+	if (aliases.length === 1) {
+		const agent = aliases[0];
+		if (!agent) return {};
+		// B5: validate tool allowlist at resolve time
+		const toolError = validateAgentTools(agent);
+		if (toolError) return { error: toolError };
+		return { agent };
+	}
 	if (aliases.length > 1) {
 		const effective = effectiveAgentMatch(aliases);
-		if (effective.agent) return effective;
+		if (effective.agent) {
+			// B5: validate tool allowlist at resolve time
+			const toolError = validateAgentTools(effective.agent);
+			if (toolError) return { error: toolError };
+			return effective;
+		}
 		return { error: `Ambiguous agent alias '${name}': ${aliases.map((agent) => agent.name).join(", ")}` };
 	}
 	return {};
