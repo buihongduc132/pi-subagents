@@ -598,6 +598,9 @@ describe("subagent prompt runtime", () => {
 		// Clear the ack capture env explicitly: when this test suite itself runs inside a
 		// pi-subagents child, the runner sets it and an extra agent_end handler registers.
 		delete process.env[RUNTIME_EXTENSION_ACK_PATH_ENV];
+		// B4 baseline fix: clear steering inbox env so registerSteeringInbox doesn't
+		// register extra handlers when the test suite runs inside a live subagent.
+		delete process.env[SUBAGENT_STEER_INBOX_ENV];
 		const handlersWithout = new Map<string, unknown[]>();
 		registerSubagentPromptRuntime({
 			on(event: string, handler: unknown) {

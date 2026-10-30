@@ -388,7 +388,12 @@ export function registerSteeringInbox(
 				}
 				const requestedMode = request.mode ?? "steer";
 				const autoCanUseIdle = requestedMode === "auto" && !agentRunning && !awaitingSettlement;
-				const delivery = requestedMode === "follow_up" || (requestedMode === "auto" && (inTurn || awaitingSettlement)) ? "followUp" as const : "steer" as const;
+				// B4: mid-turn or awaiting-settlement agent cannot accept deliverAs:"steer" —
+				// pi throws "Agent is already processing". Downgrade to followUp so guidance
+				// is queued instead of crashing the child. Between turns (agentRunning but
+				// !inTurn && !awaitingSettlement) steer is still allowed.
+				const midTurnBusy = inTurn || awaitingSettlement;
+				const delivery = requestedMode === "follow_up" || (requestedMode !== "follow_up" && midTurnBusy) ? "followUp" as const : "steer" as const;
 				const pendingFollowUps = [...pending.values()].reduce((count, entries) => count + entries.filter((entry) => entry.deliveryStatus === "queued").length, 0);
 				if (delivery === "followUp" && queued.length + pendingFollowUps >= MAX_STEER_QUEUE_SIZE) {
 					acknowledge(request, "failed", `Follow-up queue is full (${MAX_STEER_QUEUE_SIZE} messages).`);
